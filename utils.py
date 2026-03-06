@@ -71,7 +71,7 @@ def extract_color_bands(image):
 	rows, cols = image.shape[0], image.shape[1]
 
 	# Rotate image
-	M = cv2.getRotationMatrix2D((rect[0][0],rect[0][1]), angle-90, 1)
+	M = cv2.getRotationMatrix2D((rect[0][0],rect[0][1]), angle, 1)
 	image_aligned = cv2.warpAffine(image,M,(cols,rows))
 
 	# Rotate bounding box 
@@ -80,7 +80,7 @@ def extract_color_bands(image):
 	pts[pts < 0] = 0
 
 	# Cropping
-	image_cropped = image_aligned[pts[0][1]:pts[3][1], pts[0][0]:pts[2][0]]
+	image_cropped = image_aligned[min(pts[:,1]):max(pts[:,1]), min(pts[:,0]):max(pts[:,0])]
 
 	# Get HSV calibration params 
 	hsvfile1 = np.load('./data/resistor_data/demo3_hsv_resistor.npy')
@@ -102,8 +102,11 @@ def extract_color_bands(image):
 	# Find the three largest contours of the color bands
 	contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
 
+	# Filter out contours whose bounding box is too small to yield valid pixels after the inner margin crop (y+10:y+h-10, x+5:x+w-5)
+	valid_contours = [c for c in contours if cv2.boundingRect(c)[2] > 10 and cv2.boundingRect(c)[3] > 20]
+
 	# Get three largest contours
-	largest_contours = sorted(contours, key=cv2.contourArea, reverse=True)[0:3]
+	largest_contours = sorted(valid_contours, key=cv2.contourArea, reverse=True)[0:3]
 
 	# Sort contours from left to right
 	sorted_contours = sorted(largest_contours, key=lambda ctr: cv2.boundingRect(ctr)[0])
@@ -121,8 +124,10 @@ def extract_color_bands(image):
 		roi_s = [i for i in roi[:,:,1].ravel() if i != 0]  
 		roi_v = [i for i in roi[:,:,2].ravel() if i != 0]  
 
-		# Get means of HSV data
-		mean_hsv = [np.mean(roi_h), np.mean(roi_s), np.mean(roi_v)]
+		# Get means of HSV data (use 0.0 as fallback to avoid NaN if roi is empty)
+		mean_hsv = [np.mean(roi_h) if len(roi_h) > 0 else 0.0,
+		            np.mean(roi_s) if len(roi_s) > 0 else 0.0,
+		            np.mean(roi_v) if len(roi_v) > 0 else 0.0]
 
 		# Predict
 		color_bands.append(mean_hsv)
