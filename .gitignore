@@ -2,3 +2,5 @@
 *data
 *logs
 *.h5
+*.pt
+*./runs
